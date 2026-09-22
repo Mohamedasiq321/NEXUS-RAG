@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import uuid
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
@@ -9,6 +10,7 @@ from app.ingestion.processors.chunker import create_chunks
 from app.retrieval.embedding_service import EmbeddingService
 from app.storage.document_repository import DocumentRepository
 from app.storage.chunk_repository import ChunkRepository
+from app.database.connection import get_connection
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,24 +24,34 @@ file_path = (
 )
 
 
-# 1. Load document
+# Remove any previous copy of the sample document
+with get_connection() as connection:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM documents WHERE file_name = %s",
+            ("remote_work_policy.txt",),
+        )
+    connection.commit()
+
+
 document = load_txt(str(file_path))
 
-# 2. Create structure-aware chunks
+# Use a fresh UUID for this clean test run
+document.document_id = str(uuid.uuid4())
+
 chunks = create_chunks(document)
 
-# 3. Generate embeddings
 embedding_service = EmbeddingService()
+
 texts = [chunk.content for chunk in chunks]
 embeddings = embedding_service.embed_texts(texts)
 
-# 4. Save document
 document_repository = DocumentRepository()
 document_repository.save(document)
 
-# 5. Save chunks + embeddings
 chunk_repository = ChunkRepository()
 chunk_repository.save_many(chunks, embeddings)
+
 
 print("Persistence pipeline completed successfully!")
 print("=" * 60)
