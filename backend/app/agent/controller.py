@@ -1,8 +1,8 @@
 from app.agent.evidence_evaluator import EvidenceEvaluator
+from app.agent.query_refiner import QueryRefiner
 from app.agent.state import AgentState
 from app.retrieval.evidence_aggregator import EvidenceAggregator
 from app.retrieval.multi_hop_retriever import MultiHopRetriever
-from app.retrieval.query_transformer import QueryTransformer
 
 
 class AgentController:
@@ -18,7 +18,9 @@ class AgentController:
           ↓
         Evidence evaluation
           ↓
-        Retry if evidence is insufficient
+        Query refinement if evidence is insufficient
+          ↓
+        Controlled retry
     """
 
     def __init__(
@@ -31,7 +33,7 @@ class AgentController:
         self.evaluator = EvidenceEvaluator(
             minimum_evidence=minimum_evidence,
         )
-        self.query_transformer = QueryTransformer()
+        self.refiner = QueryRefiner()
 
         self.max_iterations = max_iterations
 
@@ -91,10 +93,12 @@ class AgentController:
             if state.iteration >= self.max_iterations:
                 break
 
-            # Refine the retrieval query before retrying
-            current_query = self.query_transformer.transform(
+            # Refine the query before the next retrieval attempt
+            refinement = self.refiner.refine(
                 current_query,
             )
+
+            current_query = refinement.refined_query
 
         state.retrieval_query = current_query
 

@@ -16,12 +16,12 @@ query = "What is the company's annual bonus policy?"
 
 state = controller.run(query)
 
-print("Testing controlled retry behavior!")
+print("Testing intelligent controlled retry!")
 print("=" * 90)
 
 print(f"Original Query     : {state.original_query}")
 print(f"Final Iteration    : {state.iteration}")
-print(f"Retrieval Query    : {state.retrieval_query}")
+print(f"Final Retrieval   : {state.retrieval_query}")
 print(f"Subqueries         : {state.subqueries}")
 print(f"Evidence Count     : {len(state.evidence)}")
 print(f"Evidence Sufficient: {state.evidence_sufficient}")
@@ -39,4 +39,4 @@ for rank, evidence in enumerate(
     print("-" * 90)
 
 print("=" * 90)
-print("Retry behavior test completed!")
+print("Intelligent retry test completed!")
