@@ -45,15 +45,16 @@ class AnswerContextBuilder:
             )
 
             citations.append(
-                {
-                    "citation_id": citation_id,
-                    "chunk_id": evidence["chunk_id"],
-                    "document_id": evidence["document_id"],
-                    "section": evidence["section"],
-                    "source_hops": evidence["source_hops"],
-                    "score": evidence["score"],
-                }
-            )
+    {
+        "citation_id": citation_id,
+        "chunk_id": evidence["chunk_id"],
+        "document_id": evidence["document_id"],
+        "section": evidence["section"],
+        "content": evidence["content"],
+        "source_hops": evidence["source_hops"],
+        "score": evidence["score"],
+    }
+)
 
         context = "\n\n".join(context_blocks)
 

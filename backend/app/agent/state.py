@@ -25,5 +25,6 @@ class AgentState:
     citations: list[dict] = field(default_factory=list)
 
     verification_passed: bool = False
+    verification_reason: str = ""
 
     iteration: int = 0

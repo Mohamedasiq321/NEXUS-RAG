@@ -7,7 +7,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.agent.answer_context import AnswerContextBuilder
 from app.agent.controller import AgentController
 from app.generation.ollama_generator import OllamaAnswerGenerator
-
+from app.agent.answer_verifier import AnswerVerifier
+from app.agent.citation_manager import CitationManager
 
 controller = AgentController(
     max_iterations=2,
@@ -19,6 +20,9 @@ generator = OllamaAnswerGenerator(
     model="qwen2.5:1.5b",
 )
 
+verifier = AnswerVerifier()
+
+citation_manager = CitationManager()
 
 query = (
     "Who is eligible for remote work "
@@ -44,14 +48,33 @@ print("Generating answer with local Ollama model...")
 print("=" * 90)
 
 result = generator.generate(context)
+citation_attachment = citation_manager.attach(
+    result.answer,
+    result.citations,
+)
+
+verification = verifier.verify(
+    citation_attachment.answer,
+    citation_attachment.citations,
+)
 
 print("ANSWER")
 print("=" * 90)
-print(result.answer)
+print(citation_attachment.answer)
+
+print("=" * 90)
+print("VERIFICATION")
+print("=" * 90)
+print(f"Passed           : {verification.passed}")
+print(f"Cited IDs        : {verification.cited_ids}")
+print(f"Invalid citations: {verification.invalid_citations}")
+print(f"Reason           : {verification.reason}")
 
 print("=" * 90)
 print(f"Grounded : {result.grounded}")
-print(f"Citations: {len(result.citations)}")
+print(
+    f"Citations: {len(citation_attachment.citations)}"
+)
 print("=" * 90)
 
 print("Local generation test completed!")
