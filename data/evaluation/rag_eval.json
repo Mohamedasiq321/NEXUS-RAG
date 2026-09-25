@@ -1,0 +1,44 @@
+[
+  {
+    "id": "q1",
+    "query": "Who is eligible for remote work?",
+    "relevant_sections": [
+      "1. Eligibility"
+    ]
+  },
+  {
+    "id": "q2",
+    "query": "How many days per week can eligible employees work remotely?",
+    "relevant_sections": [
+      "2. Remote Work Allowance"
+    ]
+  },
+  {
+    "id": "q3",
+    "query": "What equipment can remote employees request?",
+    "relevant_sections": [
+      "3. Equipment"
+    ]
+  },
+  {
+    "id": "q4",
+    "query": "What security requirements apply to remote employees?",
+    "relevant_sections": [
+      "4. Security Requirements"
+    ]
+  },
+  {
+    "id": "q5",
+    "query": "Who approves exceptions to the remote work allowance?",
+    "relevant_sections": [
+      "5. Exceptions"
+    ]
+  },
+  {
+    "id": "q6",
+    "query": "How often is the remote work policy reviewed?",
+    "relevant_sections": [
+      "6. Policy Review"
+    ]
+  }
+]
