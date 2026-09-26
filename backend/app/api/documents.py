@@ -13,7 +13,7 @@ router = APIRouter(
 
 ingestion_service = DocumentIngestionService()
 
-SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx", ".csv"}
 
 
 @router.post("/upload")
@@ -29,7 +29,7 @@ async def upload_document(file: UploadFile = File(...)):
     if extension not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail="Supported file types: .txt, .pdf, .docx",
+            detail="Supported file types: .txt, .pdf, .docx, .csv",
         )
 
     try:

@@ -53,8 +53,8 @@ class OllamaAnswerGenerator:
                 "stream": False,
                 "think": False,
                 "options": {
-                    "temperature": 0.1,
-                    "num_predict": 150,
+                    "temperature": 0.0,
+                    "num_predict": 120,
                 },
             },
             timeout=300,
@@ -63,7 +63,6 @@ class OllamaAnswerGenerator:
         response.raise_for_status()
 
         data = response.json()
-
         answer = data["response"].strip()
 
         return LocalGeneratedAnswer(
@@ -78,22 +77,9 @@ class OllamaAnswerGenerator:
     ) -> str:
 
         return f"""
-You are the answer-generation component of NEXUS-RAG.
+You are the final answer generator for NEXUS-RAG.
 
-Answer the user's question using ONLY the evidence provided below.
-
-STRICT RULES:
-1. Do not use outside knowledge.
-2. Do not invent or assume facts.
-3. If the evidence does not support a claim, do not make that claim.
-4. Answer directly and concisely.
-5. Cite factual claims using the supplied citation IDs such as [S1].
-6. Only use citation IDs that actually appear in the evidence.
-7. Do not mention retrieval scores or internal implementation details.
-8. Do not explain your reasoning.
-9. Keep the answer to 2-4 concise sentences.
-10. If the evidence is insufficient, clearly state that the available
-    evidence is insufficient.
+Your ONLY source of truth is the EVIDENCE provided below.
 
 USER QUESTION:
 {context.query}
@@ -101,5 +87,38 @@ USER QUESTION:
 EVIDENCE:
 {context.context}
 
-Now provide ONLY the final grounded answer.
+Follow these rules exactly:
+
+1. Use ONLY facts explicitly present in the EVIDENCE.
+2. NEVER use outside knowledge or assumptions.
+3. NEVER invent an employee, ID, department, role, number, status,
+   date, policy rule, or other entity.
+4. Every employee ID mentioned in the answer MUST appear exactly in
+   the EVIDENCE.
+5. Every numeric value mentioned in the answer MUST be supported by
+   the EVIDENCE.
+6. Every status mentioned in the answer MUST be supported by the
+   EVIDENCE.
+7. Do NOT combine information from different employees unless the
+   question explicitly asks for a comparison or list.
+8. If the question asks which employees satisfy a condition, include
+   ONLY employees whose evidence explicitly satisfies ALL requested
+   conditions.
+9. If an employee does not appear in evidence satisfying ALL requested
+   conditions, DO NOT include that employee.
+10. If the evidence is insufficient to answer the question, say:
+    "The available evidence is insufficient to answer this question."
+11. Cite factual statements using ONLY the supplied citation IDs:
+    [S1], [S2], etc.
+12. Never create a citation ID that does not exist.
+13. Do not mention retrieval, ranking, embeddings, scores, models,
+    verification, or internal system details.
+14. Keep the answer concise.
+15. Return ONLY the final answer. Do not explain your reasoning.
+
+IMPORTANT:
+Before producing the answer, internally check every entity and value
+against the EVIDENCE. If a fact cannot be found there, remove it.
+
+FINAL ANSWER:
 """.strip()

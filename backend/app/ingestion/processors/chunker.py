@@ -44,6 +44,9 @@ def split_into_sections(content: str) -> list[tuple[str, str]]:
 
 
 def create_chunks(document: Document) -> list[DocumentChunk]:
+    if document.file_type == "csv":
+        return create_csv_chunks(document)
+
     sections = split_into_sections(document.content)
 
     chunks = []
@@ -63,6 +66,64 @@ def create_chunks(document: Document) -> list[DocumentChunk]:
                 "file_type": document.file_type,
                 "source": document.source,
                 "version": document.version,
+                **document.metadata,
+            },
+        )
+
+        chunks.append(chunk)
+
+    return chunks
+    sections = split_into_sections(document.content)
+
+    chunks = []
+
+    for index, (section, content) in enumerate(sections):
+        if not content:
+            continue
+
+        chunk = DocumentChunk(
+            chunk_id=str(uuid4()),
+            document_id=document.document_id,
+            content=content,
+            chunk_index=index,
+            section=section,
+            metadata={
+                "file_name": document.file_name,
+                "file_type": document.file_type,
+                "source": document.source,
+                "version": document.version,
+                **document.metadata,
+            },
+        )
+
+        chunks.append(chunk)
+
+    return chunks
+
+def create_csv_chunks(document: Document) -> list[DocumentChunk]:
+    chunks = []
+
+    rows = [
+        line.strip()
+        for line in document.content.splitlines()
+        if line.strip()
+    ]
+
+    for index, row_content in enumerate(rows):
+        row_number = index + 2
+
+        chunk = DocumentChunk(
+            chunk_id=str(uuid4()),
+            document_id=document.document_id,
+            content=row_content,
+            chunk_index=index,
+            section=f"Row {row_number}",
+            metadata={
+                "file_name": document.file_name,
+                "file_type": document.file_type,
+                "source": document.source,
+                "version": document.version,
+                "row_number": row_number,
                 **document.metadata,
             },
         )

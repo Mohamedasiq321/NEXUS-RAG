@@ -52,7 +52,20 @@ class AnswerContextBuilder:
         "section": evidence["section"],
         "content": evidence["content"],
         "source_hops": evidence["source_hops"],
-        "score": evidence["score"],
+"score": evidence["score"],
+"structured_match": evidence.get(
+    "structured_match",
+    False,
+),
+        "structured_exact_match": evidence.get(
+    "structured_exact_match",
+    False,
+),
+        "matched_conditions": evidence.get(
+    "matched_conditions",
+    {},
+),
+
     }
 )
 

@@ -1,0 +1,7 @@
+employee_id,department,role,remote_days_per_week,status
+EMP001,Engineering,Software Engineer,3,Approved
+EMP002,Finance,Financial Analyst,2,Approved
+EMP003,Human Resources,HR Executive,1,Approved
+EMP004,Operations,Operations Manager,0,Not Eligible
+EMP005,Engineering,ML Engineer,3,Approved
+EMP006,Sales,Sales Executive,2,Approved

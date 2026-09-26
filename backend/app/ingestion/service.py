@@ -7,6 +7,7 @@ from app.retrieval.embedding_service import EmbeddingService
 from app.storage.chunk_repository import ChunkRepository
 from app.storage.document_repository import DocumentRepository
 from app.ingestion.loaders.docx_loader import load_docx
+from app.ingestion.loaders.csv_loader import load_csv
 
 class DocumentIngestionService:
     def __init__(self):
@@ -29,6 +30,8 @@ class DocumentIngestionService:
             document = load_pdf(str(path))
         elif extension == ".docx":
             document = load_docx(str(path))
+        elif extension == ".csv":
+            document = load_csv(str(path))
         else:
             raise ValueError(
                 "Currently supported file types: .txt, .pdf, .docx"

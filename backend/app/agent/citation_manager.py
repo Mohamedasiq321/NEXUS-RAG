@@ -10,8 +10,13 @@ class CitationAttachment:
 
 class CitationManager:
     """
-    Attaches citations to generated answer sentences using
-    deterministic lexical overlap with retrieved evidence.
+    Attaches citations to generated answer sentences.
+
+    Citation strategy:
+    1. Detect explicit structured entities such as employee IDs.
+    2. Attach the exact structured evidence containing each entity.
+    3. Fall back to deterministic lexical-overlap matching.
+    4. Preserve provenance without relying on the LLM for citation selection.
 
     The LLM generates the answer.
     NEXUS-RAG determines the provenance.
@@ -97,6 +102,7 @@ class CitationManager:
                 for citation in citation_matches:
                     if citation not in used_citations:
                         used_citations.append(citation)
+
             else:
                 attached_sentences.append(sentence.strip())
 
@@ -112,6 +118,29 @@ class CitationManager:
         minimum_score: int = 2,
     ) -> list[dict]:
 
+        # ---------------------------------------------------------
+        # 1. Structured entity matching
+        # ---------------------------------------------------------
+        #
+        # Example:
+        #
+        # "The employees approved are EMP005 and EMP001."
+        #
+        # If EMP005 and EMP001 appear in the sentence, locate the
+        # exact structured rows containing those employee IDs.
+        #
+        structured_entity_matches = self._find_structured_entity_matches(
+            sentence,
+            citations,
+        )
+
+        if structured_entity_matches:
+            return structured_entity_matches
+
+        # ---------------------------------------------------------
+        # 2. Standard lexical-overlap matching
+        # ---------------------------------------------------------
+
         sentence_tokens = self._tokenize(sentence)
 
         scored = []
@@ -124,7 +153,9 @@ class CitationManager:
                 ]
             )
 
-            evidence_tokens = self._tokenize(evidence_text)
+            evidence_tokens = self._tokenize(
+                evidence_text
+            )
 
             overlap = sentence_tokens.intersection(
                 evidence_tokens,
@@ -147,15 +178,78 @@ class CitationManager:
 
         best_score = scored[0][0]
 
-        # Only attach citations that achieve the actual
-        # highest overlap score. Do not include near-matches.
         return [
             citation
             for score, citation in scored
             if score == best_score
         ][:2]
 
-    def _tokenize(self, text: str) -> set[str]:
+    def _find_structured_entity_matches(
+        self,
+        sentence: str,
+        citations: list[dict],
+    ) -> list[dict]:
+        """
+        Finds exact structured evidence for entities explicitly
+        mentioned in the generated answer.
+
+        Currently supports employee IDs such as:
+        EMP001
+        EMP005
+        EMP123
+        """
+
+        entity_pattern = r"\bEMP\d+\b"
+
+        entities = re.findall(
+            entity_pattern,
+            sentence.upper(),
+        )
+
+        if not entities:
+            return []
+
+        matches = []
+
+        for entity in dict.fromkeys(entities):
+            for citation in citations:
+
+                if not citation.get(
+                    "structured_match",
+                    False,
+                ):
+                    continue
+
+                evidence_text = " ".join(
+                    [
+                        str(
+                            citation.get(
+                                "section",
+                                "",
+                            )
+                        ),
+                        str(
+                            citation.get(
+                                "content",
+                                "",
+                            )
+                        ),
+                    ]
+                ).upper()
+
+                if entity in evidence_text:
+                    if citation not in matches:
+                        matches.append(citation)
+
+                    break
+
+        return matches
+
+    def _tokenize(
+        self,
+        text: str,
+    ) -> set[str]:
+
         words = re.findall(
             r"\b[a-zA-Z0-9]+\b",
             text.lower(),
@@ -168,7 +262,10 @@ class CitationManager:
         }
 
     @staticmethod
-    def _split_sentences(text: str) -> list[str]:
+    def _split_sentences(
+        text: str,
+    ) -> list[str]:
+
         return re.split(
             r"(?<=[.!?])\s+",
             text.strip(),

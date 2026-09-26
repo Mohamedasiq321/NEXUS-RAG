@@ -127,16 +127,23 @@ class AgentController:
 
             # Convert Evidence objects into agent state dictionaries
             state.evidence = [
-                {
-                    "chunk_id": item.chunk_id,
-                    "document_id": item.document_id,
-                    "section": item.section,
-                    "content": item.content,
-                    "score": item.score,
-                    "source_hops": item.source_hops,
-                }
-                for item in evidence
-            ]
+    {
+        "chunk_id": item.chunk_id,
+        "document_id": item.document_id,
+        "section": item.section,
+        "content": item.content,
+        "score": item.score,
+        "source_hops": item.source_hops,
+        "structured_match": item.structured_match,
+        "structured_exact_match": (
+            item.structured_exact_match
+        ),
+        "matched_conditions": (
+            item.matched_conditions or {}
+        ),
+    }
+    for item in evidence
+]
 
             # ---------------------------------------------------------
             # 3. DETERMINE REQUIRED EVIDENCE

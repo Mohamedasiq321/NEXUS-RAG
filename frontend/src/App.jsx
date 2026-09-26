@@ -194,7 +194,7 @@ function App() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt,.pdf,.docx"
+              accept=".txt,.pdf,.docx,.csv"
               onChange={handleFileChange}
               hidden
             />
@@ -220,7 +220,7 @@ function App() {
                   ? `${(
                       selectedFile.size / 1024
                     ).toFixed(1)} KB`
-                  : "TXT, PDF, and DOCX files supported"}
+                  :  "TXT, PDF, DOCX, and CSV files supported"}
               </span>
             </button>
 
@@ -339,16 +339,30 @@ function App() {
                 </h2>
               </div>
 
-              <div className="verification-badge">
-                ✓ Verified
-              </div>
+              <div
+  className={`verification-badge ${
+    result.verification_passed &&
+    result.claims_supported &&
+    result.grounded
+      ? "verified"
+      : "unverified"
+  }`}
+>
+  {result.verification_passed &&
+  result.claims_supported &&
+  result.grounded
+    ? "✓ Verified"
+    : "⚠ Verification failed"}
+</div>
             </div>
 
             <div className="answer-card">
 
               <div className="answer-label">
-                Evidence grounded
-              </div>
+  {result.grounded
+    ? "Evidence grounded"
+    : "Evidence verification failed"}
+</div>
 
               <p className="answer-text">
                 {result.answer}

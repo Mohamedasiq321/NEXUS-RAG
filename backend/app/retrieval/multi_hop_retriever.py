@@ -24,6 +24,37 @@ class MultiHopRetriever:
 
         subqueries = self.decomposer.decompose(query)
 
+        # Structured-data questions may require multiple
+        # row-level evidence items. Give the retriever more
+        # room so relevant rows are not discarded too early.
+        retrieval_top_k = top_k
+
+        lowered_query = query.lower()
+
+        structured_indicators = [
+            "employee",
+            "employees",
+            "row",
+            "rows",
+            "department",
+            "departments",
+            "role",
+            "roles",
+            "approved",
+            "not eligible",
+            "status",
+            "remote days",
+        ]
+
+        if any(
+            indicator in lowered_query
+            for indicator in structured_indicators
+        ):
+            retrieval_top_k = max(
+                top_k,
+                6,
+            )
+
         hops = []
 
         for hop_number, subquery in enumerate(
@@ -32,8 +63,8 @@ class MultiHopRetriever:
         ):
             results = self.retriever.search(
                 subquery,
-                candidate_k=5,
-                top_k=top_k,
+                candidate_k=6,
+                top_k=retrieval_top_k,
             )
 
             hops.append(
