@@ -1,3 +1,4 @@
+import hashlib
 import re
 from pathlib import Path
 from uuid import uuid4
@@ -66,6 +67,9 @@ def load_txt(file_path: str) -> Document:
         raise ValueError("Expected a .txt file")
 
     content = path.read_text(encoding="utf-8")
+    content_hash = hashlib.sha256(
+    content.encode("utf-8")
+).hexdigest()
 
     extracted_metadata = extract_metadata(content)
 
@@ -76,6 +80,7 @@ def load_txt(file_path: str) -> Document:
         content=content,
         source=extracted_metadata.get("source", ""),
         version=extracted_metadata.get("version", ""),
+        content_hash=content_hash,
         metadata={
             **extracted_metadata,
             "file_size_bytes": path.stat().st_size,

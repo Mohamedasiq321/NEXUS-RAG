@@ -12,6 +12,9 @@ class Document:
 
     source: str = ""
     version: str = ""
+    content_hash: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(
+        default_factory=datetime.utcnow
+    )
