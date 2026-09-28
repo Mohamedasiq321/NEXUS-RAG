@@ -48,7 +48,30 @@ class BM25Retriever:
         if tokenized_documents:
             self.bm25 = BM25Okapi(tokenized_documents)
 
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
+    @staticmethod
+    def _matches_metadata(
+        metadata: dict,
+        metadata_filters: dict[str, str],
+    ) -> bool:
+        for key, expected_value in metadata_filters.items():
+            actual_value = metadata.get(key)
+
+            if actual_value is None:
+                return False
+
+            if str(actual_value).strip().lower() != str(
+                expected_value
+            ).strip().lower():
+                return False
+
+        return True
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        metadata_filters: dict[str, str] | None = None,
+    ) -> list[dict]:
         if not self.documents or self.bm25 is None:
             return []
 
@@ -56,8 +79,19 @@ class BM25Retriever:
 
         scores = self.bm25.get_scores(tokenized_query)
 
+        filters = metadata_filters or {}
+
+        candidate_indices = [
+            index
+            for index, document in enumerate(self.documents)
+            if self._matches_metadata(
+                document["metadata"],
+                filters,
+            )
+        ]
+
         ranked_indices = sorted(
-            range(len(scores)),
+            candidate_indices,
             key=lambda index: scores[index],
             reverse=True,
         )[:top_k]

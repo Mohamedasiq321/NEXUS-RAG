@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass
 
 import requests
@@ -14,10 +15,11 @@ class LocalGeneratedAnswer:
 
 class OllamaAnswerGenerator:
     """
-    Generates grounded answers using a local Ollama model.
+    Generates concise answers from the controlled evidence context.
 
-    The model receives only the controlled AnswerContext,
-    keeping generation grounded in retrieved evidence.
+    Evidence sufficiency is decided by the NEXUS-RAG agent before
+    generation. The local LLM is responsible only for converting
+    the supplied evidence into a concise natural-language answer.
     """
 
     def __init__(
@@ -63,7 +65,14 @@ class OllamaAnswerGenerator:
         response.raise_for_status()
 
         data = response.json()
-        answer = data["response"].strip()
+
+        answer = data.get("response", "").strip()
+
+        if not answer:
+            answer = (
+                "The available evidence does not contain "
+                "a usable answer."
+            )
 
         return LocalGeneratedAnswer(
             answer=answer,
@@ -77,9 +86,9 @@ class OllamaAnswerGenerator:
     ) -> str:
 
         return f"""
-You are the final answer generator for NEXUS-RAG.
+You are NEXUS-RAG's answer generator.
 
-Your ONLY source of truth is the EVIDENCE provided below.
+Answer the USER QUESTION using ONLY the information in the EVIDENCE.
 
 USER QUESTION:
 {context.query}
@@ -87,38 +96,30 @@ USER QUESTION:
 EVIDENCE:
 {context.context}
 
-Follow these rules exactly:
+Instructions:
 
-1. Use ONLY facts explicitly present in the EVIDENCE.
-2. NEVER use outside knowledge or assumptions.
-3. NEVER invent an employee, ID, department, role, number, status,
-   date, policy rule, or other entity.
-4. Every employee ID mentioned in the answer MUST appear exactly in
-   the EVIDENCE.
-5. Every numeric value mentioned in the answer MUST be supported by
-   the EVIDENCE.
-6. Every status mentioned in the answer MUST be supported by the
-   EVIDENCE.
-7. Do NOT combine information from different employees unless the
-   question explicitly asks for a comparison or list.
-8. If the question asks which employees satisfy a condition, include
-   ONLY employees whose evidence explicitly satisfies ALL requested
-   conditions.
-9. If an employee does not appear in evidence satisfying ALL requested
-   conditions, DO NOT include that employee.
-10. If the evidence is insufficient to answer the question, say:
-    "The available evidence is insufficient to answer this question."
-11. Cite factual statements using ONLY the supplied citation IDs:
-    [S1], [S2], etc.
-12. Never create a citation ID that does not exist.
-13. Do not mention retrieval, ranking, embeddings, scores, models,
-    verification, or internal system details.
-14. Keep the answer concise.
-15. Return ONLY the final answer. Do not explain your reasoning.
+- Answer the user's question directly.
+- Use only facts explicitly stated in the evidence.
+- Do not add outside knowledge.
+- Do not guess or invent information.
+- Keep the answer concise and natural.
+- If the question asks "who", identify the relevant people or employees
+  only when they are explicitly present in the evidence.
+- If the question asks "what", explain the relevant rule or information
+  stated in the evidence.
+- If the question asks "how many", use only numbers explicitly stated
+  in the evidence.
+- Preserve important conditions and limitations stated in the evidence.
+- Do not discuss retrieval, embeddings, models, verification, or
+  internal system processes.
+- Do not explain your reasoning.
+- Return ONLY the final answer.
 
-IMPORTANT:
-Before producing the answer, internally check every entity and value
-against the EVIDENCE. If a fact cannot be found there, remove it.
+Citation rules:
+- Use the citation IDs provided in the evidence.
+- A citation ID looks like [S1], [S2], or [S3].
+- Place the relevant citation ID after the factual statement.
+- Never invent a citation ID.
 
 FINAL ANSWER:
 """.strip()

@@ -3,6 +3,7 @@ from app.retrieval.query_router import QueryRouter
 from app.retrieval.query_transformer import QueryTransformer
 from app.retrieval.reranker import Reranker
 from app.retrieval.structured_retriever import StructuredRetriever
+from app.retrieval.metadata_filter import MetadataFilterExtractor
 
 
 class RAGRetriever:
@@ -12,57 +13,43 @@ class RAGRetriever:
         self.hybrid_retriever = HybridRetriever()
         self.reranker = Reranker()
         self.structured_retriever = StructuredRetriever()
+        self.metadata_filter_extractor = MetadataFilterExtractor()
 
     def search(
         self,
         query: str,
         candidate_k: int = 5,
         top_k: int = 3,
+        metadata_filters: dict[str, str] | None = None,
     ) -> list[dict]:
 
-        # ---------------------------------------------------------
-        # 1. Query routing
-        # ---------------------------------------------------------
         route = self.query_router.route(query)
 
-        # ---------------------------------------------------------
-        # 2. Query transformation
-        # ---------------------------------------------------------
         transformed_query = self.query_transformer.transform(query)
 
-        # ---------------------------------------------------------
-        # 3. Adaptive retrieval depth
-        # ---------------------------------------------------------
+        if metadata_filters is None:
+            metadata_filters = (
+                self.metadata_filter_extractor.extract(query)
+            )
+
         if route.route == "complex":
             candidate_k = max(candidate_k, 8)
             top_k = max(top_k, 5)
 
-        # ---------------------------------------------------------
-        # 4. Hybrid retrieval
-        #    Dense + BM25 + RRF
-        # ---------------------------------------------------------
         hybrid_results = self.hybrid_retriever.search(
             transformed_query,
             top_k=candidate_k,
+            metadata_filters=metadata_filters,
         )
 
-        # ---------------------------------------------------------
-        # 5. Structured retrieval
-        #    Deterministic row-level retrieval for CSV data
-        # ---------------------------------------------------------
         structured_results = self.structured_retriever.search(
-            query,
-            top_k=top_k,
-        )
+    query,
+    top_k=top_k,
+    metadata_filters=metadata_filters,
+)
 
-        # ---------------------------------------------------------
-        # 6. Combine retrieval results
-        # ---------------------------------------------------------
         candidates = hybrid_results + structured_results
 
-        # ---------------------------------------------------------
-        # 7. Deduplicate candidates by chunk_id
-        # ---------------------------------------------------------
         unique_candidates = {}
 
         for result in candidates:
@@ -89,28 +76,21 @@ class RAGRetriever:
 
         candidates = list(unique_candidates.values())
 
-        # ---------------------------------------------------------
-        # 8. Rerank combined evidence
-        # ---------------------------------------------------------
         results = self.reranker.rerank(
             transformed_query,
             candidates,
             top_k=top_k,
         )
 
-        # ---------------------------------------------------------
-        # 9. Preserve structured retrieval information
-        # ---------------------------------------------------------
         for result in results:
             result["original_query"] = query
             result["retrieval_query"] = transformed_query
             result["route"] = route.route
             result["route_reason"] = route.reason
-
-            # Make sure this field always exists.
             result["structured_match"] = result.get(
                 "structured_match",
                 False,
             )
+            result["metadata_filters"] = metadata_filters
 
         return results

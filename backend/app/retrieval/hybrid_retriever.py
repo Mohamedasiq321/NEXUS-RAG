@@ -11,16 +11,19 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int = 5,
+        metadata_filters: dict[str, str] | None = None,
     ) -> list[dict]:
 
         dense_results = self.dense_retriever.search(
             query,
             top_k=top_k,
+            metadata_filters=metadata_filters,
         )
 
         bm25_results = self.bm25_retriever.search(
             query,
             top_k=top_k,
+            metadata_filters=metadata_filters,
         )
 
         return self._reciprocal_rank_fusion(
@@ -50,7 +53,9 @@ class HybridRetriever:
                     "rrf_score": 0.0,
                 }
 
-            fused_results[chunk_id]["rrf_score"] += 1 / (k + rank)
+            fused_results[chunk_id]["rrf_score"] += 1 / (
+                k + rank
+            )
 
         for rank, result in enumerate(bm25_results, start=1):
             chunk_id = str(result["chunk_id"])
@@ -66,7 +71,9 @@ class HybridRetriever:
             else:
                 fused_results[chunk_id]["bm25_rank"] = rank
 
-            fused_results[chunk_id]["rrf_score"] += 1 / (k + rank)
+            fused_results[chunk_id]["rrf_score"] += 1 / (
+                k + rank
+            )
 
         ranked_results = sorted(
             fused_results.values(),

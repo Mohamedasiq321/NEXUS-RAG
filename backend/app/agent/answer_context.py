@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass
 
 from app.agent.state import AgentState
@@ -45,31 +46,32 @@ class AnswerContextBuilder:
             )
 
             citations.append(
-    {
-        "citation_id": citation_id,
-        "chunk_id": evidence["chunk_id"],
-        "document_id": evidence["document_id"],
-        "section": evidence["section"],
-        "content": evidence["content"],
-        "source_hops": evidence["source_hops"],
-"score": evidence["score"],
-"structured_match": evidence.get(
-    "structured_match",
-    False,
-),
-        "structured_exact_match": evidence.get(
-    "structured_exact_match",
-    False,
-),
-        "matched_conditions": evidence.get(
-    "matched_conditions",
-    {},
-),
-
-    }
-)
+                {
+                    "citation_id": citation_id,
+                    "chunk_id": evidence["chunk_id"],
+                    "document_id": evidence["document_id"],
+                    "section": evidence["section"],
+                    "content": evidence["content"],
+                    "source_hops": evidence["source_hops"],
+                    "score": evidence["score"],
+                    "structured_match": evidence.get(
+                        "structured_match",
+                        False,
+                    ),
+                    "structured_exact_match": evidence.get(
+                        "structured_exact_match",
+                        False,
+                    ),
+                    "matched_conditions": evidence.get(
+                        "matched_conditions",
+                        {},
+                    ),
+                }
+            )
 
         context = "\n\n".join(context_blocks)
+
+       
 
         return AnswerContext(
             query=state.original_query,

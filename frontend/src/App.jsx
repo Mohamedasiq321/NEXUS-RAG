@@ -1,7 +1,14 @@
+
 import { useRef, useState } from "react";
 import "./App.css";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
+
+const SAMPLE_QUERIES = [
+  "Who is eligible for remote work?",
+  "Which employees have 3 remote days per week and are approved?",
+  "What is the company's maternity leave policy?",
+];
 
 function App() {
   const [query, setQuery] = useState("");
@@ -48,7 +55,9 @@ function App() {
       setResult(data);
     } catch (error) {
       setResult({
-        error: error.message,
+        error:
+          error.message ||
+          "Unable to connect to the NEXUS-RAG backend.",
       });
     } finally {
       setLoading(false);
@@ -78,10 +87,7 @@ function App() {
 
     const formData = new FormData();
 
-    formData.append(
-      "file",
-      selectedFile
-    );
+    formData.append("file", selectedFile);
 
     try {
       const response = await fetch(
@@ -107,7 +113,9 @@ function App() {
         fileInputRef.current.value = "";
       }
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(
+        error.message || "Document upload failed."
+      );
     } finally {
       setUploading(false);
     }
@@ -122,6 +130,18 @@ function App() {
       askNexus();
     }
   };
+
+  const useSampleQuery = (sampleQuery) => {
+    setQuery(sampleQuery);
+    setResult(null);
+  };
+
+  const isVerified =
+    result?.verification_passed &&
+    result?.claims_supported &&
+    result?.grounded;
+
+  const telemetry = result?.telemetry;
 
   return (
     <div className="app-shell">
@@ -220,7 +240,7 @@ function App() {
                   ? `${(
                       selectedFile.size / 1024
                     ).toFixed(1)} KB`
-                  :  "TXT, PDF, DOCX, and CSV files supported"}
+                  : "TXT, PDF, DOCX, and CSV files supported"}
               </span>
             </button>
 
@@ -276,6 +296,7 @@ function App() {
                 {uploadError}
               </div>
             )}
+
           </div>
         </section>
 
@@ -319,6 +340,29 @@ function App() {
               </button>
 
             </div>
+
+            <div className="sample-query-section">
+              <span className="sample-query-label">
+                TRY A QUERY
+              </span>
+
+              <div className="sample-query-list">
+                {SAMPLE_QUERIES.map(
+                  (sampleQuery) => (
+                    <button
+                      key={sampleQuery}
+                      className="sample-query-button"
+                      onClick={() =>
+                        useSampleQuery(sampleQuery)
+                      }
+                    >
+                      {sampleQuery}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -329,6 +373,7 @@ function App() {
           <section className="result-section">
 
             <div className="result-header">
+
               <div>
                 <div className="section-eyebrow">
                   RESEARCH RESULT
@@ -340,29 +385,29 @@ function App() {
               </div>
 
               <div
-  className={`verification-badge ${
-    result.verification_passed &&
-    result.claims_supported &&
-    result.grounded
-      ? "verified"
-      : "unverified"
-  }`}
->
-  {result.verification_passed &&
-  result.claims_supported &&
-  result.grounded
-    ? "✓ Verified"
-    : "⚠ Verification failed"}
-</div>
+                className={`verification-badge ${
+                  isVerified
+                    ? "verified"
+                    : "unverified"
+                }`}
+              >
+                {isVerified
+                  ? "✓ Verified"
+                  : "⚠ Verification failed"}
+              </div>
+
             </div>
+
+
+            {/* ANSWER */}
 
             <div className="answer-card">
 
               <div className="answer-label">
-  {result.grounded
-    ? "Evidence grounded"
-    : "Evidence verification failed"}
-</div>
+                {result.grounded
+                  ? "Evidence grounded"
+                  : "Evidence verification failed"}
+              </div>
 
               <p className="answer-text">
                 {result.answer}
@@ -395,9 +440,19 @@ function App() {
                   </strong>
                 </div>
 
+                <div>
+                  <span>Route</span>
+                  <strong>
+                    {telemetry?.route || "—"}
+                  </strong>
+                </div>
+
               </div>
+
             </div>
 
+
+            {/* EVIDENCE SOURCES */}
 
             {result.citations?.length > 0 && (
               <div className="evidence-section">
@@ -420,7 +475,9 @@ function App() {
                           citation.citation_id
                         }
                       >
+
                         <div className="source-top">
+
                           <span className="source-id">
                             {citation.citation_id}
                           </span>
@@ -428,6 +485,7 @@ function App() {
                           <span className="source-type">
                             Document
                           </span>
+
                         </div>
 
                         <strong>
@@ -443,6 +501,7 @@ function App() {
                           Chunk:{" "}
                           {citation.chunk_id}
                         </div>
+
                       </div>
                     )
                   )}
@@ -451,9 +510,137 @@ function App() {
               </div>
             )}
 
+
+            {/* TELEMETRY */}
+
+            {telemetry && (
+              <div className="telemetry-section">
+
+                <div className="section-eyebrow">
+                  RAG TELEMETRY
+                </div>
+
+                <h3>
+                  Retrieval & Verification Trace
+                </h3>
+
+                <div className="telemetry-grid">
+
+                  <div className="telemetry-card">
+                    <span>Route</span>
+                    <strong>
+                      {telemetry.route || "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Iterations</span>
+                    <strong>
+                      {telemetry.iterations ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Evidence</span>
+                    <strong>
+                      {telemetry.evidence_count ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Citations</span>
+                    <strong>
+                      {telemetry.citations_count ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Claims</span>
+                    <strong>
+                      {telemetry.claims_count ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Supported</span>
+                    <strong>
+                      {telemetry.supported_claims_count ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Retrieval</span>
+                    <strong>
+                      {telemetry.timings_ms?.retrieval != null
+                        ? `${telemetry.timings_ms.retrieval} ms`
+                        : "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Generation</span>
+                    <strong>
+                      {telemetry.timings_ms?.generation != null
+                        ? `${telemetry.timings_ms.generation} ms`
+                        : "—"}
+                    </strong>
+                  </div>
+
+                  <div className="telemetry-card">
+                    <span>Total</span>
+                    <strong>
+                      {telemetry.timings_ms?.total != null
+                        ? `${telemetry.timings_ms.total} ms`
+                        : "—"}
+                    </strong>
+                  </div>
+
+                </div>
+
+                {telemetry.subqueries?.length > 0 && (
+                  <div className="telemetry-detail">
+                    <span>SUBQUERIES</span>
+
+                    {telemetry.subqueries.map(
+                      (subquery, index) => (
+                        <div
+                          key={`${subquery}-${index}`}
+                          className="telemetry-query"
+                        >
+                          {subquery}
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {telemetry.evidence_sections?.length > 0 && (
+                  <div className="telemetry-detail">
+                    <span>EVIDENCE SECTIONS</span>
+
+                    <div className="telemetry-tags">
+                      {telemetry.evidence_sections.map(
+                        (section) => (
+                          <span
+                            key={section}
+                            className="telemetry-tag"
+                          >
+                            {section}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+
           </section>
         )}
 
+
+        {/* ERROR */}
 
         {result?.error && (
           <div className="error-card">
@@ -530,3 +717,4 @@ function App() {
 }
 
 export default App;
+

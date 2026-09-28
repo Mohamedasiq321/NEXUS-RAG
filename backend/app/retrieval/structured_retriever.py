@@ -11,26 +11,29 @@ class StructuredRetriever:
     retrieval because structured questions often require exact
     condition matching.
 
-    Example:
-
-        Query:
-            "Which employees are approved for 3 remote days per week?"
-
-        Required conditions:
-            remote_days_per_week = 3
-            status = Approved
-
-        A row is an exact structured match only when ALL extracted
-        conditions are satisfied.
+    Metadata filters extracted from the original user query can be
+    supplied externally so multi-hop retrieval does not lose
+    constraints when a query is decomposed.
     """
 
     def search(
         self,
         query: str,
         top_k: int = 5,
+        metadata_filters: dict[str, str] | None = None,
     ) -> list[dict]:
 
-        conditions = self._extract_conditions(query)
+        # ---------------------------------------------------------
+        # Use externally supplied filters when available.
+        #
+        # This is important for multi-hop retrieval because a
+        # subquery such as "are approved" may not contain the
+        # original Engineering + 3 remote days constraints.
+        # ---------------------------------------------------------
+        if metadata_filters is None:
+            conditions = self._extract_conditions(query)
+        else:
+            conditions = dict(metadata_filters)
 
         if not conditions:
             return []
@@ -73,9 +76,9 @@ class StructuredRetriever:
             required_count = len(conditions)
 
             # -----------------------------------------------------
-            # Exact structured matching
+            # Exact structured matching.
             #
-            # Every extracted condition must match.
+            # Every required condition must match.
             # -----------------------------------------------------
             if matched_count != required_count:
                 continue
@@ -102,10 +105,10 @@ class StructuredRetriever:
             )
 
         # ---------------------------------------------------------
-        # Deterministic ranking
+        # Deterministic ranking.
         #
         # Exact matches have already passed the AND filter.
-        # Prefer more specific matches first, then stable row order.
+        # Keep stable row ordering.
         # ---------------------------------------------------------
         results.sort(
             key=lambda result: (
@@ -242,5 +245,32 @@ class StructuredRetriever:
                     matched_conditions[field] = (
                         expected_value
                     )
+
+            # -----------------------------------------------------
+            # Generic metadata fields
+            #
+            # Supports filters such as:
+            #   department
+            #   role
+            #   employee_id / id
+            #
+            # These are matched against chunk metadata.
+            # -----------------------------------------------------
+            else:
+
+                actual_value = metadata.get(field)
+
+                if actual_value is None and field == "id":
+                    actual_value = metadata.get(
+                        "employee_id"
+                    )
+
+                if actual_value is not None:
+                    if str(actual_value).strip().lower() == str(
+                        expected_value
+                    ).strip().lower():
+                        matched_conditions[field] = (
+                            expected_value
+                        )
 
         return matched_conditions

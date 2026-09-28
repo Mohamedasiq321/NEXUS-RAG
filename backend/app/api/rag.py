@@ -1,12 +1,16 @@
-from pydantic import BaseModel
-from fastapi import APIRouter
+import re
+import time
+from uuid import uuid4
 
-from app.agent.controller import AgentController
+from fastapi import APIRouter
+from pydantic import BaseModel
+
 from app.agent.answer_context import AnswerContextBuilder
 from app.agent.answer_verifier import AnswerVerifier
-from app.agent.citation_manager import CitationManager
 from app.agent.claim_extractor import ClaimExtractor
 from app.agent.claim_verifier import ClaimVerifier
+from app.agent.citation_manager import CitationManager
+from app.agent.controller import AgentController
 from app.generation.ollama_generator import OllamaAnswerGenerator
 
 
@@ -32,6 +36,26 @@ class CitationResponse(BaseModel):
     document_id: str
 
 
+class RAGTelemetry(BaseModel):
+    request_id: str
+
+    route: str
+    iterations: int
+    retrieval_query: str
+    subqueries: list[str]
+
+    evidence_count: int
+    evidence_sections: list[str]
+    structured_evidence_count: int
+    evidence_sufficient: bool
+
+    citations_count: int
+    claims_count: int
+    supported_claims_count: int
+
+    timings_ms: dict[str, float]
+
+
 class RAGQueryResponse(BaseModel):
     query: str
     answer: str
@@ -39,6 +63,7 @@ class RAGQueryResponse(BaseModel):
     verification_passed: bool
     claims_supported: bool
     citations: list[CitationResponse]
+    telemetry: RAGTelemetry
 
 
 # =============================================================
@@ -75,29 +100,100 @@ claim_verifier = ClaimVerifier()
 def query_rag(
     request: RAGQueryRequest,
 ):
+    request_id = str(uuid4())
+
+    total_start = time.perf_counter()
 
     # ---------------------------------------------------------
     # 1. Agentic retrieval
     # ---------------------------------------------------------
 
+    retrieval_start = time.perf_counter()
+
     state = controller.run(
         request.query
     )
+
+    retrieval_time_ms = (
+        time.perf_counter() - retrieval_start
+    ) * 1000
+
+    # ---------------------------------------------------------
+    # Build retrieval telemetry
+    # ---------------------------------------------------------
+
+    evidence_sections = [
+        str(item.get("section", ""))
+        for item in state.evidence
+        if item.get("section")
+    ]
+
+    structured_evidence_count = sum(
+        1
+        for item in state.evidence
+        if item.get("structured_exact_match")
+    )
+
+    retrieval_telemetry = {
+        "request_id": request_id,
+        "route": "agentic",
+        "iterations": state.iteration,
+        "retrieval_query": state.retrieval_query,
+        "subqueries": state.subqueries,
+        "evidence_count": len(state.evidence),
+        "evidence_sections": evidence_sections,
+        "structured_evidence_count": (
+            structured_evidence_count
+        ),
+        "evidence_sufficient": (
+            state.evidence_sufficient
+        ),
+        "citations_count": 0,
+        "claims_count": 0,
+        "supported_claims_count": 0,
+        "timings_ms": {
+            "retrieval": round(
+                retrieval_time_ms,
+                2,
+            ),
+        },
+    }
 
     # ---------------------------------------------------------
     # 2. Build grounded answer context
     # ---------------------------------------------------------
 
+    context_start = time.perf_counter()
+
     context = context_builder.build(
         state
     )
 
+    context_time_ms = (
+        time.perf_counter() - context_start
+    ) * 1000
+
+    retrieval_telemetry["timings_ms"][
+        "context_build"
+    ] = round(
+        context_time_ms,
+        2,
+    )
+
     # ---------------------------------------------------------
-    # If retrieval did not provide sufficient evidence,
-    # stop here and return a grounded refusal.
+    # 3. Grounded refusal
     # ---------------------------------------------------------
 
     if not context.grounded:
+
+        retrieval_telemetry["timings_ms"][
+            "total"
+        ] = round(
+            (time.perf_counter() - total_start)
+            * 1000,
+            2,
+        )
+
         return RAGQueryResponse(
             query=request.query,
             answer=(
@@ -109,36 +205,78 @@ def query_rag(
             verification_passed=False,
             claims_supported=False,
             citations=[],
+            telemetry=RAGTelemetry(
+                **retrieval_telemetry
+            ),
         )
 
     # ---------------------------------------------------------
-    # 3. Generate answer
+    # 4. Generate answer
     # ---------------------------------------------------------
+
+    generation_start = time.perf_counter()
 
     result = generator.generate(
         context
     )
 
+    generation_time_ms = (
+        time.perf_counter() - generation_start
+    ) * 1000
+
+    retrieval_telemetry["timings_ms"][
+        "generation"
+    ] = round(
+        generation_time_ms,
+        2,
+    )
+
     # ---------------------------------------------------------
-    # 4. Attach deterministic citations
+    # 5. Attach deterministic citations
     # ---------------------------------------------------------
+
+    citation_start = time.perf_counter()
 
     citation_attachment = citation_manager.attach(
         result.answer,
         result.citations,
     )
 
+    citation_time_ms = (
+        time.perf_counter() - citation_start
+    ) * 1000
+
+    retrieval_telemetry["timings_ms"][
+        "citation_attachment"
+    ] = round(
+        citation_time_ms,
+        2,
+    )
+
     # ---------------------------------------------------------
-    # 5. Verify citation placement
+    # 6. Verify citation placement
     # ---------------------------------------------------------
+
+    verification_start = time.perf_counter()
 
     verification = answer_verifier.verify(
         citation_attachment.answer,
         citation_attachment.citations,
     )
 
+    verification_time_ms = (
+        time.perf_counter() - verification_start
+    ) * 1000
+
+    retrieval_telemetry["timings_ms"][
+        "citation_verification"
+    ] = round(
+        verification_time_ms,
+        2,
+    )
+
     # ---------------------------------------------------------
-    # 6. Extract claims
+    # 7. Extract claims
     # ---------------------------------------------------------
 
     claims = claim_extractor.extract(
@@ -146,14 +284,7 @@ def query_rag(
     )
 
     # ---------------------------------------------------------
-    # 7. Verify every claim against all evidence
-    #    that supports that claim.
-    #
-    # This is important for claims such as:
-    #
-    # "EMP005 and EMP001 are approved..."
-    #
-    # where one claim depends on two separate rows.
+    # 8. Verify claims
     # ---------------------------------------------------------
 
     claim_results = []
@@ -165,10 +296,7 @@ def query_rag(
             citation_attachment.citations,
         )
 
-        # -----------------------------------------------------
-        # No supporting citation found
-        # -----------------------------------------------------
-
+        # No supporting citation
         if not supporting_citations:
 
             claim_results.append(
@@ -181,10 +309,7 @@ def query_rag(
 
             continue
 
-        # -----------------------------------------------------
         # One supporting citation
-        # -----------------------------------------------------
-
         if len(supporting_citations) == 1:
 
             citation_id = supporting_citations[0][
@@ -201,17 +326,7 @@ def query_rag(
 
             continue
 
-        # -----------------------------------------------------
         # Multiple supporting citations
-        #
-        # Example:
-        #
-        # EMP005 → S1
-        # EMP001 → S2
-        #
-        # The claim must be verified against both.
-        # -----------------------------------------------------
-
         combined_citation_id = (
             "__combined_claim_evidence__"
         )
@@ -261,8 +376,14 @@ def query_rag(
         )
 
     # ---------------------------------------------------------
-    # 8. Overall claim verification
+    # 9. Overall claim verification
     # ---------------------------------------------------------
+
+    supported_claims_count = sum(
+        1
+        for item in claim_results
+        if item.supported
+    )
 
     claims_supported = (
         len(claim_results) == len(claims)
@@ -272,15 +393,6 @@ def query_rag(
             for item in claim_results
         )
     )
-
-    # ---------------------------------------------------------
-    # 9. Final verification status
-    #
-    # The answer is considered verified only when:
-    #
-    #   - citation placement passes
-    #   - every extracted claim is supported
-    # ---------------------------------------------------------
 
     verification_passed = (
         verification.passed
@@ -293,7 +405,7 @@ def query_rag(
     )
 
     # ---------------------------------------------------------
-    # 10. Build API citation response
+    # 10. Build API citations
     # ---------------------------------------------------------
 
     citations = [
@@ -311,7 +423,31 @@ def query_rag(
     ]
 
     # ---------------------------------------------------------
-    # 11. Return final RAG response
+    # 11. Complete telemetry
+    # ---------------------------------------------------------
+
+    retrieval_telemetry[
+        "citations_count"
+    ] = len(citations)
+
+    retrieval_telemetry[
+        "claims_count"
+    ] = len(claims)
+
+    retrieval_telemetry[
+        "supported_claims_count"
+    ] = supported_claims_count
+
+    retrieval_telemetry["timings_ms"][
+        "total"
+    ] = round(
+        (time.perf_counter() - total_start)
+        * 1000,
+        2,
+    )
+
+    # ---------------------------------------------------------
+    # 12. Return final response
     # ---------------------------------------------------------
 
     return RAGQueryResponse(
@@ -321,6 +457,9 @@ def query_rag(
         verification_passed=verification_passed,
         claims_supported=claims_supported,
         citations=citations,
+        telemetry=RAGTelemetry(
+            **retrieval_telemetry
+        ),
     )
 
 
@@ -337,18 +476,10 @@ def _find_claim_citations(
     if not citations:
         return []
 
-    import re
-
     claim_upper = claim_text.upper()
 
     # ---------------------------------------------------------
-    # 1. Exact structured entity matching
-    #
-    # Example:
-    #
-    # "EMP005 and EMP001 are approved..."
-    #
-    # We return BOTH rows instead of only the first match.
+    # Structured entity matching
     # ---------------------------------------------------------
 
     employee_ids = {
@@ -388,8 +519,6 @@ def _find_claim_citations(
                 ]
             ).upper()
 
-            # Only select a citation when it contains
-            # an employee explicitly mentioned in the claim.
             if any(
                 employee_id in evidence_text
                 for employee_id in employee_ids
@@ -402,7 +531,7 @@ def _find_claim_citations(
             return matched_citations
 
     # ---------------------------------------------------------
-    # 2. Lexical fallback
+    # Lexical fallback
     # ---------------------------------------------------------
 
     claim_tokens = _tokenize_claim(
@@ -468,8 +597,6 @@ def _find_claim_citations(
 def _tokenize_claim(
     text: str,
 ) -> set[str]:
-
-    import re
 
     stopwords = {
         "the",

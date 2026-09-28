@@ -6,12 +6,31 @@ class DenseRetriever:
     def __init__(self):
         self.embedding_service = EmbeddingService()
 
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        metadata_filters: dict[str, str] | None = None,
+    ) -> list[dict]:
         query_embedding = self.embedding_service.embed_text(query)
 
         vector = "[" + ",".join(map(str, query_embedding)) + "]"
 
-        sql = """
+        where_clauses = [
+            "embedding IS NOT NULL"
+        ]
+
+        parameters: list = []
+
+        for key, value in (metadata_filters or {}).items():
+            where_clauses.append(
+                "LOWER(metadata ->> %s) = LOWER(%s)"
+            )
+            parameters.extend([key, value])
+
+        where_sql = " AND ".join(where_clauses)
+
+        sql = f"""
         SELECT
             chunk_id,
             document_id,
@@ -21,16 +40,18 @@ class DenseRetriever:
             metadata,
             1 - (embedding <=> %s::vector) AS similarity
         FROM chunks
-        WHERE embedding IS NOT NULL
+        WHERE {where_sql}
         ORDER BY embedding <=> %s::vector
         LIMIT %s;
         """
+
+        parameters = [vector] + parameters + [vector, top_k]
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     sql,
-                    (vector, vector, top_k),
+                    parameters,
                 )
 
                 rows = cursor.fetchall()
